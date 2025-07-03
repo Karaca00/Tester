@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกวันที่ด้วย Firebase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column; /* จัดให้เป็นแนวตั้ง */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #message {
+            margin-top: 20px;
+            font-size: 1.1em;
+            color: #333;
+            text-align: center;
+        }
+        #dateList {
+            margin-top: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+            width: 80%;
+            max-width: 500px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        #dateList h2 {
+            margin-top: 0;
+            color: #555;
+        }
+        #dateList ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        #dateList li {
+            padding: 8px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        #dateList li:last-child {
+            border-bottom: none;
+        }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div>
+        <button onclick="saveDate()">บันทึกวันที่ปัจจุบันลง Firebase</button>
+        <p id="message"></p>
+    </div>
+
+    <div id="dateList">
+        <h2>วันที่ที่บันทึกไว้</h2>
+        <ul id="dates">
+            </ul>
+    </div>
+
+    <script>
+        // STEP 1: วาง Firebase Configuration ของคุณที่นี่
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPLPEig2DuVmPBnp654vtLved2x373o64",
+            authDomain: "tester-5ead2.firebaseapp.com",
+            projectId: "tester-5ead2",
+            storageBucket: "tester-5ead2.firebasestorage.app",
+            messagingSenderId: "352436666156",
+            appId: "1:352436666156:web:13f7aa528c42bcbaf13689",
+            measurementId: "G-H32613VB65"
+        };
+
+        // STEP 2: เริ่มต้น Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore(); // รับ Reference ไปยัง Firestore Database
+
+        // ฟังก์ชันสำหรับบันทึกวันที่
+        async function saveDate() {
+            const now = new Date(); // วันที่และเวลาปัจจุบัน
+            const dateString = now.toLocaleString('th-TH', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false // ใช้รูปแบบ 24 ชั่วโมง
+            });
+
+            try {
+                // เพิ่มเอกสารใหม่ใน Collection 'dates'
+                // add() จะสร้าง ID เอกสารให้โดยอัตโนมัติ
+                await db.collection("dates").add({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(), // บันทึกเวลาที่ Firestore สร้างให้ (แม่นยำกว่า)
+                    date_string: dateString
+                });
+                document.getElementById('message').innerText = `วันที่ถูกบันทึกเรียบร้อย: ${dateString}`;
+                loadDates(); // โหลดวันที่ใหม่เพื่ออัปเดตรายการ
+            } catch (error) {
+                console.error("เกิดข้อผิดพลาดในการบันทึกวันที่:", error);
+                document.getElementById('message').innerText = 'เกิดข้อผิดพลาดในการบันทึกวันที่: ' + error.message;
+            }
+        }
+
+        // ฟังก์ชันสำหรับโหลดวันที่ที่บันทึกไว้มาแสดง
+        async function loadDates() {
+            const datesList = document.getElementById('dates');
+            datesList.innerHTML = ''; // เคลียร์รายการเดิมก่อนโหลดใหม่
+
+            try {
+                // ดึงข้อมูลจาก collection 'dates' โดยเรียงลำดับจากใหม่ไปเก่า
+                const querySnapshot = await db.collection("dates")
+                                              .orderBy("timestamp", "desc") // เรียงจากเวลาล่าสุดก่อน
+                                              .limit(10) // แสดงแค่ 10 รายการล่าสุด
+                                              .get();
+
+                if (querySnapshot.empty) {
+                    datesList.innerHTML = '<li>ยังไม่มีวันที่ถูกบันทึก</li>';
+                    return;
+                }
+
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const listItem = document.createElement('li');
+                    // ตรวจสอบว่า timestamp เป็นชนิด Timestamp หรือไม่ก่อนเรียก toDate()
+                    const displayDate = data.timestamp instanceof firebase.firestore.Timestamp
+                                        ? data.timestamp.toDate().toLocaleString('th-TH')
+                                        : data.date_string; // ใช้ date_string ถ้า timestamp ไม่ใช่ Timestamp
+
+                    listItem.textContent = displayDate;
+                    datesList.appendChild(listItem);
+                });
+            } catch (error) {
+                console.error("เกิดข้อผิดพลาดในการโหลดวันที่:", error);
+                datesList.innerHTML = '<li>เกิดข้อผิดพลาดในการโหลดวันที่: ' + error.message + '</li>';
+            }
+        }
+
+        // โหลดวันที่เมื่อหน้าเว็บโหลดเสร็จ
+        window.onload = loadDates;
+    </script>
+</body>
+</html>
